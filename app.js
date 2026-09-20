@@ -1,47 +1,76 @@
-/* ============================================================
-   SDD WORKSHOP — BASE TEMPLATE (app.js)
-   ============================================================
-   โครงโค้ดกลางที่ใช้ได้กับทุกโจทย์ ประกอบด้วย
-   - state เดียวที่เป็นแหล่งความจริง (single source of truth)
-   - โหลด/บันทึกลง localStorage
-   - render() วาดหน้าจอใหม่ทั้งหมดจาก state
-
-   แต่ละทีมแก้ส่วนที่เขียนว่า TODO ให้ตรงกับโจทย์ของตัวเอง
-   ต้องวางไฟล์นี้ไว้ที่ root ข้าง ๆ index.html เสมอ
-   ============================================================ */
-
 'use strict';
 
-/* ---------- 1) ค่าคงที่และ state ---------- */
+const STORAGE_KEY = 'sdd-team-5-movie-watchlist';
+const FILTERS = ['all', 'unwatched', 'watched'];
 
-// TODO: เปลี่ยน key ให้เป็นชื่อแอปของทีม เช่น 'sdd-team-1-expense'
-const STORAGE_KEY = 'sdd-workshop-base';
-
-// TODO: ปรับ field ของ item ให้ครบตามโจทย์ (เช่น amount, category, rating, dueDate)
 let state = {
-  items: [],        // รายการทั้งหมด
-  filter: 'all',    // มุมมองที่เลือกอยู่
+  items: [],
+  filter: 'all',
+  query: '',
 };
 
-/* ---------- 2) อ้างอิง element จาก index.html ---------- */
-
 const form = document.querySelector('#item-form');
-const inputName = document.querySelector('#input-name');
+const titleInput = document.querySelector('#input-name');
+const genreInput = document.querySelector('#input-genre');
+const yearInput = document.querySelector('#input-year');
+const searchInput = document.querySelector('#search-input');
 const formError = document.querySelector('#form-error');
 const summaryText = document.querySelector('#summary-text');
 const filterSection = document.querySelector('#filter-section');
 const itemList = document.querySelector('#item-list');
 const emptyState = document.querySelector('#empty-state');
+const noResults = document.querySelector('#no-results');
 const clearButton = document.querySelector('#btn-clear');
 
-/* ---------- 3) localStorage ---------- */
+function createId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+}
+
+function showError(message) {
+  formError.textContent = message;
+  formError.hidden = !message;
+}
+
+function isValidRating(rating) {
+  return Number.isInteger(rating) && rating >= 1 && rating <= 5;
+}
+
+function normalizeItem(item) {
+  if (!item || typeof item.id !== 'string' || typeof item.title !== 'string') return null;
+
+  const title = item.title.trim();
+  if (!title) return null;
+
+  return {
+    id: item.id,
+    title,
+    genre: typeof item.genre === 'string' ? item.genre : '',
+    releaseYear: typeof item.releaseYear === 'string' ? item.releaseYear : '',
+    watched: Boolean(item.watched),
+    rating: isValidRating(item.rating) ? item.rating : null,
+    createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+  };
+}
 
 function loadState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      state = { ...state, ...JSON.parse(saved) };
-    }
+    if (!saved) return;
+
+    const parsed = JSON.parse(saved);
+    if (!parsed || !Array.isArray(parsed.items)) throw new Error('รูปแบบข้อมูลไม่ถูกต้อง');
+
+    state = {
+      items: parsed.items.map(normalizeItem).filter(Boolean),
+      filter: FILTERS.includes(parsed.filter) ? parsed.filter : 'all',
+      query: typeof parsed.query === 'string' ? parsed.query : '',
+    };
   } catch (error) {
     console.warn('โหลดข้อมูลเดิมไม่สำเร็จ เริ่มจากข้อมูลว่าง', error);
   }
@@ -55,74 +84,90 @@ function saveState() {
   }
 }
 
-/* ---------- 4) ตัวช่วย ---------- */
-
-function createId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
-// ป้องกันข้อความของผู้ใช้ทำ HTML พัง เมื่อนำไปใส่ด้วย innerHTML
-function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[char]);
-}
-
-function showError(message) {
-  formError.textContent = message;
-  formError.hidden = !message;
-}
-
-/* ---------- 5) การกระทำต่อข้อมูล (Create / Update / Delete) ---------- */
-
-// TODO: รับค่าจากช่องกรอกอื่น ๆ ตามโจทย์ แล้วเก็บเข้า item ด้วย
-function addItem(name) {
+function addItem(title, genre, releaseYear) {
   state.items.unshift({
     id: createId(),
-    name: name,
-    done: false,
+    title,
+    genre,
+    releaseYear,
+    watched: false,
+    rating: null,
     createdAt: new Date().toISOString(),
   });
 }
 
-function toggleItem(id) {
-  const item = state.items.find((entry) => entry.id === id);
-  if (item) item.done = !item.done;
+function getItem(id) {
+  return state.items.find((item) => item.id === id);
 }
 
-function deleteItem(id) {
-  state.items = state.items.filter((entry) => entry.id !== id);
-}
-
-// TODO: เปลี่ยนเงื่อนไขให้ตรงกับตัวกรองของโจทย์
 function getVisibleItems() {
-  if (state.filter === 'active') return state.items.filter((item) => !item.done);
-  if (state.filter === 'done') return state.items.filter((item) => item.done);
-  return state.items;
+  const query = state.query.trim().toLocaleLowerCase();
+
+  return state.items.filter((item) => {
+    const matchesFilter = state.filter === 'all'
+      || (state.filter === 'watched' && item.watched)
+      || (state.filter === 'unwatched' && !item.watched);
+    const matchesQuery = !query || item.title.toLocaleLowerCase().includes(query);
+    return matchesFilter && matchesQuery;
+  });
 }
 
-/* ---------- 6) วาดหน้าจอ ---------- */
+function renderStars(rating) {
+  return Array.from({ length: 5 }, (_, index) => (
+    `<span class="${index < rating ? 'is-filled' : ''}">★</span>`
+  )).join('');
+}
+
+function renderRating(item) {
+  if (!item.watched) {
+    return '<div class="rating"><span class="rating-hint">ดูจบแล้วจึงให้คะแนนได้</span></div>';
+  }
+
+  const buttons = Array.from({ length: 5 }, (_, index) => {
+    const value = index + 1;
+    return `<button type="button" class="btn btn-star ${item.rating === value ? 'is-selected' : ''}" data-action="rate" data-rating="${value}" aria-label="ให้คะแนน ${value} ดาว">${value}</button>`;
+  }).join('');
+
+  const currentRating = item.rating
+    ? `<span class="rating-stars" aria-label="คะแนน ${item.rating} จาก 5 ดาว">${renderStars(item.rating)}</span>`
+    : '<span class="rating-hint">ยังไม่ได้ให้คะแนน</span>';
+
+  return `<div class="rating">${currentRating}<div class="rating-controls"><span>ให้คะแนน:</span>${buttons}</div></div>`;
+}
+
+function renderItem(item) {
+  const metadata = [item.genre, item.releaseYear].filter(Boolean)
+    .map((value) => `<span>${escapeHtml(value)}</span>`).join('');
+
+  return `
+    <li class="movie-card ${item.watched ? 'is-watched' : ''}" data-id="${item.id}">
+      <div class="movie-card__top">
+        <h2 class="movie-title">${escapeHtml(item.title)}</h2>
+        <span class="status">${item.watched ? 'ดูจบแล้ว' : 'ยังไม่ได้ดู'}</span>
+      </div>
+      ${metadata ? `<div class="movie-card__meta">${metadata}</div>` : ''}
+      ${renderRating(item)}
+      <div class="movie-card__actions">
+        <button type="button" class="btn" data-action="toggle">${item.watched ? 'ทำเครื่องหมายว่ายังไม่ได้ดู' : 'ทำเครื่องหมายว่าดูจบแล้ว'}</button>
+        <button type="button" class="btn" data-action="edit">แก้ไข</button>
+        <button type="button" class="btn btn-danger" data-action="delete">ลบ</button>
+      </div>
+    </li>
+  `;
+}
 
 function render() {
   const visibleItems = getVisibleItems();
+  const watchedCount = state.items.filter((item) => item.watched).length;
+  const remainingCount = state.items.length - watchedCount;
 
-  // ลิสต์รายการ
-  itemList.innerHTML = visibleItems.map((item) => `
-    <li class="item ${item.done ? 'is-done' : ''}" data-id="${item.id}">
-      <input type="checkbox" data-action="toggle" ${item.done ? 'checked' : ''}>
-      <span class="item-text">${escapeHtml(item.name)}</span>
-      <button type="button" class="btn btn-icon" data-action="delete">ลบ</button>
-    </li>
-  `).join('');
+  itemList.innerHTML = visibleItems.map(renderItem).join('');
+  emptyState.hidden = state.items.length > 0;
+  noResults.hidden = state.items.length === 0 || visibleItems.length > 0;
+  summaryText.textContent = `ดูจบแล้ว ${watchedCount} เรื่อง · เหลืออีก ${remainingCount} เรื่อง`;
+  searchInput.value = state.query;
+  clearButton.disabled = watchedCount === 0;
 
-  // empty state
-  emptyState.hidden = visibleItems.length > 0;
-
-  // TODO: เปลี่ยนข้อความสรุปให้ตรงกับโจทย์ (ยอดเงิน / เปอร์เซ็นต์ / จำนวนที่เหลือ)
-  const remaining = state.items.filter((item) => !item.done).length;
-  summaryText.textContent = `เหลืออีก ${remaining} รายการ จากทั้งหมด ${state.items.length} รายการ`;
-
-  // ไฮไลต์ปุ่มกรองที่เลือกอยู่
   filterSection.querySelectorAll('.btn-filter').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.filter === state.filter);
   });
@@ -130,52 +175,85 @@ function render() {
   saveState();
 }
 
-/* ---------- 7) เชื่อม event ---------- */
-
 form.addEventListener('submit', (event) => {
   event.preventDefault();
-  const name = inputName.value.trim();
+  const title = titleInput.value.trim();
 
-  // TODO: เพิ่มการตรวจสอบอื่น ๆ ตามข้อ 2.1 ของโจทย์ (เช่น ตัวเลขต้องมากกว่า 0)
-  if (!name) {
-    showError('กรุณากรอกข้อมูลก่อนกดเพิ่ม');
+  if (!title) {
+    showError('กรุณากรอกชื่อเรื่องก่อนกดเพิ่ม');
+    titleInput.focus();
     return;
   }
 
   showError('');
-  addItem(name);
+  addItem(title, genreInput.value.trim(), yearInput.value.trim());
   form.reset();
-  inputName.focus();
+  titleInput.focus();
   render();
 });
 
-// ใช้ event delegation: ผูก event ครั้งเดียวที่ลิสต์ แทนการผูกทุกแถว
 itemList.addEventListener('click', (event) => {
-  const action = event.target.dataset.action;
-  const id = event.target.closest('.item')?.dataset.id;
-  if (!action || !id) return;
+  const button = event.target.closest('[data-action]');
+  const card = event.target.closest('.movie-card');
+  if (!button || !card) return;
 
-  if (action === 'toggle') toggleItem(id);
-  if (action === 'delete') deleteItem(id);
+  const item = getItem(card.dataset.id);
+  if (!item) return;
+
+  if (button.dataset.action === 'toggle') {
+    item.watched = !item.watched;
+  }
+
+  if (button.dataset.action === 'delete') {
+    state.items = state.items.filter((entry) => entry.id !== item.id);
+  }
+
+  if (button.dataset.action === 'edit') {
+    const title = window.prompt('ชื่อเรื่อง', item.title);
+    if (title === null) return;
+
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      showError('ชื่อเรื่องต้องไม่ว่าง');
+      return;
+    }
+
+    const genre = window.prompt('แนวหนัง', item.genre);
+    if (genre === null) return;
+
+    item.title = nextTitle;
+    item.genre = genre.trim();
+    showError('');
+  }
+
+  if (button.dataset.action === 'rate' && item.watched) {
+    const rating = Number(button.dataset.rating);
+    if (isValidRating(rating)) item.rating = rating;
+  }
+
   render();
 });
 
 filterSection.addEventListener('click', (event) => {
-  const filter = event.target.dataset.filter;
-  if (!filter) return;
+  const filter = event.target.closest('[data-filter]')?.dataset.filter;
+  if (!FILTERS.includes(filter)) return;
   state.filter = filter;
   render();
 });
 
-// TODO: เปลี่ยนพฤติกรรมปุ่มนี้ตามโจทย์ (เช่น ลบเฉพาะรายการที่เสร็จแล้ว)
-clearButton.addEventListener('click', () => {
-  if (state.items.length === 0) return;
-  if (!confirm('ยืนยันการล้างรายการทั้งหมด?')) return;
-  state.items = [];
+searchInput.addEventListener('input', () => {
+  state.query = searchInput.value;
   render();
 });
 
-/* ---------- 8) เริ่มทำงาน ---------- */
+clearButton.addEventListener('click', () => {
+  const watchedCount = state.items.filter((item) => item.watched).length;
+  if (!watchedCount) return;
+  if (!window.confirm(`ยืนยันการลบรายการที่ดูจบแล้ว ${watchedCount} เรื่อง?`)) return;
+
+  state.items = state.items.filter((item) => !item.watched);
+  render();
+});
 
 loadState();
 render();
