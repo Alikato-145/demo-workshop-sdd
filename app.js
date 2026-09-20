@@ -219,10 +219,8 @@ itemList.addEventListener('click', (event) => {
     }
 
     const genre = window.prompt('แนวหนัง', item.genre);
-    if (genre === null) return;
-
     item.title = nextTitle;
-    item.genre = genre.trim();
+    if (genre !== null) item.genre = genre.trim();
     showError('');
   }
 
