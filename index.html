@@ -8,8 +8,13 @@
 </head>
 <body>
   <header class="app-header">
-    <h1>รายการหนังที่อยากดู</h1>
-    <p>เก็บเรื่องที่สนใจ ติดตามเรื่องที่ดูจบ และบันทึกคะแนนที่ชอบ</p>
+    <div>
+      <h1>รายการหนังที่อยากดู</h1>
+      <p>เก็บเรื่องที่สนใจ ติดตามเรื่องที่ดูจบ และบันทึกคะแนนที่ชอบ</p>
+    </div>
+    <section class="summary" aria-live="polite">
+      <p id="summary-text">ดูจบแล้ว 0 เรื่อง · เหลืออีก 0 เรื่อง</p>
+    </section>
   </header>
 
   <main class="app-main">
@@ -35,10 +40,6 @@
         <button type="submit" class="btn btn-primary">เพิ่มเข้าลิสต์</button>
       </form>
       <p id="form-error" class="form-error" role="alert" hidden></p>
-    </section>
-
-    <section class="card summary" aria-live="polite">
-      <p id="summary-text">ดูจบแล้ว 0 เรื่อง · เหลืออีก 0 เรื่อง</p>
     </section>
 
     <section class="toolbar" aria-label="ค้นหาและกรองรายการ">
